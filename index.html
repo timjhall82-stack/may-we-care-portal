@@ -159,7 +159,23 @@ const firebaseConfig = {
                         
                     } else {
                         // Login Logic
-                        await signInWithEmailAndPassword(auth, email, password);
+                        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                        
+                        // If user provided a name during login, update their profile
+                        // This allows existing users (like Stacey) to trigger the name check
+                        if (name && name.trim()) {
+                            const user = userCredential.user;
+                            await updateProfile(user, { displayName: name });
+                            
+                            let updates = { name: name };
+                            
+                            // Check for admin promotion on login
+                            if (name.trim().toLowerCase() === 'stacey sammons') {
+                                updates.role = 'manager';
+                            }
+                            
+                            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid), updates, { merge: true });
+                        }
                     }
                 } catch (err) {
                     console.error(err);
@@ -185,15 +201,23 @@ const firebaseConfig = {
                         {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm flex items-center gap-2"><AlertCircle size={16}/>{error}</div>}
 
                         <form onSubmit={handleSubmit} className="space-y-4">
-                            {isRegistering && (
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-                                    <div className="relative">
-                                        <User className="absolute left-3 top-3 text-slate-400" size={18} />
-                                        <input type="text" required value={name} onChange={e => setName(e.target.value)} className="pl-10 w-full p-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" placeholder="e.g. Stacey Sammons" />
-                                    </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Full Name {isRegistering ? "*" : <span className="text-slate-400 font-normal">(Optional)</span>}
+                                </label>
+                                <div className="relative">
+                                    <User className="absolute left-3 top-3 text-slate-400" size={18} />
+                                    <input 
+                                        type="text" 
+                                        required={isRegistering}
+                                        value={name} 
+                                        onChange={e => setName(e.target.value)} 
+                                        className="pl-10 w-full p-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" 
+                                        placeholder="e.g. Stacey Sammons" 
+                                    />
                                 </div>
-                            )}
+                            </div>
                             
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
