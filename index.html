@@ -137,7 +137,13 @@ const firebaseConfig = {
                         const user = userCredential.user;
                         
                         // Determine Role
-                        const role = (isManagerReg && managerCode === MANAGER_SECRET_CODE) ? 'manager' : 'staff';
+                        // Auto-promote Stacey Sammons to manager regardless of code
+                        let role = 'staff';
+                        if (name.trim().toLowerCase() === 'stacey sammons') {
+                            role = 'manager';
+                        } else if (isManagerReg && managerCode === MANAGER_SECRET_CODE) {
+                            role = 'manager';
+                        }
                         
                         // Save User Profile to Firestore
                         await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid), {
@@ -184,7 +190,7 @@ const firebaseConfig = {
                                     <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
                                     <div className="relative">
                                         <User className="absolute left-3 top-3 text-slate-400" size={18} />
-                                        <input type="text" required value={name} onChange={e => setName(e.target.value)} className="pl-10 w-full p-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" placeholder="Jane Doe" />
+                                        <input type="text" required value={name} onChange={e => setName(e.target.value)} className="pl-10 w-full p-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" placeholder="e.g. Stacey Sammons" />
                                     </div>
                                 </div>
                             )}
@@ -560,15 +566,24 @@ const firebaseConfig = {
                             try {
                                 const snap = await getDoc(profileRef);
                                 if (snap.exists()) {
-                                    setUserProfile(snap.data());
+                                    const data = snap.data();
+                                    // FORCE ADMIN ROLE for Stacey Sammons
+                                    if (data.name && data.name.trim().toLowerCase() === 'stacey sammons') {
+                                        data.role = 'manager';
+                                    }
+                                    setUserProfile(data);
                                 } else {
                                     // Fallback if auth exists but firestore profile doesnt
                                     // This handles the transition from Anonymous -> User, or if DB read fails gracefully
                                     const isAnonymous = currentUser.isAnonymous;
+                                    const name = currentUser.displayName || (isAnonymous ? 'Guest Staff' : 'Staff');
+                                    let role = 'staff';
+                                    if (name.trim().toLowerCase() === 'stacey sammons') role = 'manager';
+
                                     setUserProfile({ 
                                         uid: currentUser.uid, 
-                                        name: currentUser.displayName || (isAnonymous ? 'Guest Staff' : 'Staff'), 
-                                        role: 'staff' 
+                                        name: name, 
+                                        role: role 
                                     });
                                 }
                             } catch (docError) {
