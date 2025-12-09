@@ -500,24 +500,57 @@ const firebaseConfig = {
             // Auth Listener
             useEffect(() => {
                 if(configError) return;
+                
                 const unsub = onAuthStateChanged(auth, async (currentUser) => {
-                    setUser(currentUser);
-                    if (currentUser) {
-                        // Fetch Role Profile
-                        const profileRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUser.uid);
-                        const snap = await getDoc(profileRef);
-                        if (snap.exists()) {
-                            setUserProfile(snap.data());
+                    try {
+                        setUser(currentUser);
+                        if (currentUser) {
+                            // Fetch Role Profile
+                            const profileRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUser.uid);
+                            try {
+                                const snap = await getDoc(profileRef);
+                                if (snap.exists()) {
+                                    setUserProfile(snap.data());
+                                } else {
+                                    // Fallback if auth exists but firestore profile doesnt
+                                    // This handles the transition from Anonymous -> User, or if DB read fails gracefully
+                                    const isAnonymous = currentUser.isAnonymous;
+                                    setUserProfile({ 
+                                        uid: currentUser.uid, 
+                                        name: currentUser.displayName || (isAnonymous ? 'Guest Staff' : 'Staff'), 
+                                        role: 'staff' 
+                                    });
+                                }
+                            } catch (docError) {
+                                console.error("Profile fetch error:", docError);
+                                // Fallback on error (e.g. permission denied)
+                                setUserProfile({ uid: currentUser.uid, name: currentUser.displayName || 'Staff', role: 'staff' });
+                            }
                         } else {
-                            // Fallback if auth exists but firestore profile doesnt (shouldn't happen with new logic)
-                            setUserProfile({ uid: currentUser.uid, name: currentUser.displayName || 'Staff', role: 'staff' });
+                            setUserProfile(null);
                         }
-                    } else {
-                        setUserProfile(null);
+                    } catch (err) {
+                        console.error("Auth state change error:", err);
+                    } finally {
+                        setLoading(false);
                     }
-                    setLoading(false);
                 });
-                return () => unsub();
+
+                // Safety timeout in case auth hangs
+                const safetyTimer = setTimeout(() => {
+                    setLoading((current) => {
+                        if (current) {
+                            console.warn("Auth listener timed out, forcing load.");
+                            return false;
+                        }
+                        return current;
+                    });
+                }, 4000);
+
+                return () => {
+                    unsub();
+                    clearTimeout(safetyTimer);
+                };
             }, []);
 
             // Data Listeners
